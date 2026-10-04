@@ -3,8 +3,7 @@
 An audio-triggered 3D visualizer. PULSE listens to an audio input and, on every
 pulse that crosses the threshold, re-rolls the whole scene: figure, mesh
 density, formula coefficients, rotation, camera, replication layout and colour.
-Between pulses the mesh spins on the rolled velocities. The glitch is in those
-hard cuts. There are no blur, feedback or scanline effects.
+Between pulses the mesh spins on the rolled velocities.
 
 Figures: superformula solids, harmonic spheres, noise-displaced tori and fields,
 torus knots and box lattices, drawn as wireframes or point clouds.
