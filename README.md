@@ -11,6 +11,27 @@ torus knots and box lattices, drawn as wireframes or point clouds.
 
 Developed by **Sibilu**, 2026.
 
+## Origin: visualizing Underrun triggers
+
+PULSE was originally built to visualize the trigger outputs of **Underrun**.
+Each trigger fires a pulse, and each pulse re-rolls the scene. Any audio
+signal with clear transients will drive it too, from a mic, a drum machine or
+a click track.
+
+In the original setup, Underrun's trigger outs were patched into a VCA. The
+VCA's level was turned right down, and its output went straight into an audio
+interface input.
+
+> [!WARNING]
+> **I don't recommend copying this setup.** Eurorack trigger and gate signals
+> are far hotter than the line level an audio interface expects. Patching them
+> into a standard interface input can damage or destroy it. It only worked
+> here with very careful level handling.
+>
+> Use a proper Eurorack audio interface or output module made to bring
+> modular-level signals into a computer. Whatever you use, start with the
+> level all the way down and bring it up slowly.
+
 ## Running it
 
 It's a single HTML file (`pulse-synth.html`) with no build step. Browsers only
