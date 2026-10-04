@@ -1,0 +1,636 @@
+<!DOCTYPE html>
+<!--
+  PULSE — procedural mesh synth
+  Copyright (c) 2026 Sibilu
+  SPDX-License-Identifier: MIT — see the LICENSE file for the full terms.
+
+  If you use this in a performance, video, installation or your own project,
+  a credit to @sibiluinstruments (Instagram and elsewhere) is much appreciated.
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="author" content="Sibilu" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>PULSE — procedural mesh synth</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.9.4/p5.min.js"></script>
+<style>
+  :root{
+    --bg:#000; --panel:rgba(0,0,0,.8); --field:#0c0c0c; --line:#2b2b2b; --rule:#555;
+    --ink:#9a9a9a; --ink-dim:#777; --fg:#ededed;
+    --sans: "Helvetica Neue",Helvetica,Arial,"Nimbus Sans","Liberation Sans",sans-serif;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%;background:var(--bg);color:var(--ink);
+    font-family:var(--sans);font-size:12px;overflow:hidden;}
+  #stage{position:fixed;inset:0;}
+  canvas{display:block;}
+  #panel{position:fixed;left:0;right:0;top:0;z-index:10;display:flex;align-items:center;gap:18px;
+    flex-wrap:wrap;padding:9px 14px;background:var(--panel);backdrop-filter:blur(6px);
+    border-bottom:1px solid var(--line);}
+  #panel.hidden{display:none;}
+  .brand{display:flex;align-items:baseline;gap:8px;padding-right:14px;border-right:1px solid var(--line);}
+  .brand b{color:var(--fg);font-weight:700;letter-spacing:.08em;}
+  .brand span{color:var(--ink-dim);font-size:11px;}
+  .grp{display:flex;align-items:center;gap:7px;}
+  .grp > label{color:var(--ink-dim);font-size:11px;}
+  .val{color:var(--fg);min-width:32px;text-align:right;font-variant-numeric:tabular-nums;}
+  input[type=range]{-webkit-appearance:none;appearance:none;width:84px;height:1px;background:var(--rule);outline:none;}
+  input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:9px;height:9px;border-radius:50%;background:var(--fg);cursor:pointer;}
+  input[type=range]::-moz-range-thumb{width:9px;height:9px;border:none;border-radius:50%;background:var(--fg);cursor:pointer;}
+  select,button{background:var(--field);color:var(--ink);border:1px solid var(--line);border-radius:2px;
+    font-family:var(--sans);font-size:11px;}
+  select{padding:4px 6px;max-width:180px;}
+  button{padding:5px 11px;cursor:pointer;}
+  select:hover,button:hover{border-color:var(--rule);color:var(--fg);}
+  button.armed{border-color:var(--fg);color:var(--fg);}
+  .scope{display:flex;align-items:center;gap:9px;padding-left:14px;border-left:1px solid var(--line);}
+  #meter{position:relative;width:110px;height:8px;background:var(--field);border:1px solid var(--line);overflow:hidden;}
+  #meterFill{position:absolute;left:0;top:0;bottom:0;width:0%;background:var(--ink);}
+  #thr{position:absolute;top:0;bottom:0;width:1px;background:var(--fg);left:20%;}
+  #led{width:8px;height:8px;border-radius:50%;border:1px solid var(--rule);}
+  #led.on{background:var(--fg);border-color:var(--fg);}
+  .cnt{color:var(--ink-dim);font-size:11px;min-width:56px;}
+  .cnt b{color:var(--fg);font-weight:400;font-variant-numeric:tabular-nums;}
+  .hint{position:fixed;left:14px;bottom:12px;z-index:10;color:var(--ink-dim);font-size:11px;line-height:1.6;pointer-events:none;
+    opacity:0;transition:opacity .22s ease;}
+  .hint.show{opacity:1;}
+  .hint b{color:var(--ink);font-weight:400;}
+  .credit{margin-left:auto;color:var(--ink-dim);font-size:11px;text-decoration:none;white-space:nowrap;}
+  .credit:hover{color:var(--fg);}
+</style>
+</head>
+<body>
+<div id="stage"></div>
+
+<div id="panel">
+  <div class="brand"><b>PULSE</b><span>mesh synth</span></div>
+  <button id="startBtn">▶ start input</button>
+  <div class="grp"><label>src</label><select id="deviceSel"><option value="">— start input to list devices —</option></select></div>
+  <div class="grp"><label>ch</label><select id="chanSel"><option value="0">1</option></select></div>
+  <div class="grp"><label>polarity</label><button id="polBtn">+ rising</button></div>
+
+  <div class="scope">
+    <div id="meter"><div id="meterFill"></div><div id="thr"></div></div>
+    <div id="led"></div>
+    <div class="cnt">trigs <b id="cnt">0</b></div>
+  </div>
+
+  <div class="grp"><label>thresh</label><input id="sThr" type="range" min="0.01" max="0.9" step="0.005" value="0.18"><span class="val" id="vThr">0.18</span></div>
+  <div class="grp"><label>hold</label><input id="sRef" type="range" min="0" max="400" step="1" value="40"><span class="val" id="vRef">40</span></div>
+
+  <div class="grp"><label>figure</label>
+    <select id="figSel">
+      <option value="random" selected>random / pulse</option>
+      <option value="super">superformula</option>
+      <option value="harm">harmonic sphere</option>
+      <option value="torus">noise torus</option>
+      <option value="plane">noise field</option>
+      <option value="knot">torus knot</option>
+      <option value="lattice">lattice</option>
+    </select></div>
+
+  <div class="grp"><label>render</label>
+    <select id="modeSel">
+      <option value="random" selected>random / pulse</option>
+      <option value="wire">wireframe</option>
+      <option value="points">points</option>
+    </select></div>
+
+  <div class="grp"><label>color</label>
+    <select id="colSel">
+      <option value="cycle" selected>cycle / pulse</option>
+      <option value="mono">mono</option>
+      <option value="grey">greyscale</option>
+      <option value="pastel">pastel</option>
+      <option value="neon">neon</option>
+      <option value="hot">hot</option>
+      <option value="ember">ember</option>
+      <option value="amber">amber crt</option>
+      <option value="phos">phosphor</option>
+      <option value="toxic">toxic</option>
+      <option value="spring">spring</option>
+      <option value="autumn">autumn</option>
+      <option value="winter">winter</option>
+      <option value="deep">deep sea</option>
+      <option value="blossom">blossom</option>
+      <option value="uv">ultraviolet</option>
+      <option value="dusk">dusk</option>
+      <option value="sepia">sepia</option>
+    </select></div>
+
+  <div class="grp"><label>complexity</label><input id="sCx" type="range" min="8" max="52" step="1" value="52"><span class="val" id="vCx">52</span></div>
+  <div class="grp"><label>replicate</label><input id="sDen" type="range" min="1" max="24" step="1" value="5"><span class="val" id="vDen">5</span></div>
+  <div class="grp"><label>rate</label><input id="sRt" type="range" min="0" max="2" step="0.02" value="0.3"><span class="val" id="vRt">0.30</span></div>
+  <div class="grp"><label>chaos</label><input id="sCh" type="range" min="0" max="1" step="0.01" value="1"><span class="val" id="vCh">1.00</span></div>
+  <div class="grp"><label>weight</label><input id="sWt" type="range" min="0.5" max="6" step="0.1" value="0.7"><span class="val" id="vWt">0.7</span></div>
+  <div class="grp"><label>zoom</label><input id="sZm" type="range" min="0.3" max="3" step="0.05" value="1.6"><span class="val" id="vZm">1.60</span></div>
+  <div class="grp"><label>camera</label><input id="sDl" type="range" min="0" max="1" step="0.01" value="0.35"><span class="val" id="vDl">0.35</span></div>
+  <div class="grp"><label>cam rand</label><input id="sCr" type="range" min="0" max="1" step="0.01" value="0.2"><span class="val" id="vCr">0.20</span></div>
+
+  <button id="fsBtn">fullscreen</button>
+  <a class="credit" href="https://www.instagram.com/sibiluinstruments/" target="_blank" rel="noopener" title="@sibiluinstruments">by Sibilu © 2026</a>
+</div>
+
+<div class="hint"><b>space</b> = manual pulse &nbsp;·&nbsp; <b>h</b> = hide panel &nbsp;·&nbsp; <b>f</b> = fullscreen</div>
+
+<script>
+/* =========================================================================
+   PULSE — procedural mesh synth (p5.js / WEBGL)
+   -------------------------------------------------------------------------
+   Complex 3D procedural geometry — superformula solids, harmonic spheres,
+   noise-displaced tori/fields, torus knots, box lattices — rendered as raw
+   wireframe or point clouds.
+
+   Every rising edge RE-ROLLS the entire parameter bank: figure, subdivision,
+   formula coefficients, displacement, rotation velocities, orientation,
+   render mode, replication layout, projection, colour. That hard digital
+   discontinuity IS the glitch — no blend/feedback/scanline/tape effects
+   anywhere. Between pulses the mesh spins in 3D on the rolled velocities.
+
+   Detection: getUserMedia with echoCancellation / noiseSuppression /
+   autoGainControl OFF; Schmitt trigger (fire > THRESH, re-arm < THRESH/2)
+   + HOLD refractory; only the selected POLARITY edge fires.
+   ========================================================================= */
+
+/* detection */
+let THRESH=0.18, HOLD=40, POLARITY=1;
+/* master controls */
+let FIGSEL='random', MODESEL='random', COLSEL='cycle';
+let COMPLEX=52, REPLICATE=5, RATE=0.3, CHAOS=1.0, WEIGHT=0.7;
+let ZOOM=1.6, DOLLY=0.35, CAMRND=0.2;   // base zoom, camera dolly (0=default..1=inside), per-pulse randomness
+
+/* audio */
+let audioCtx=null,stream=null,source=null,splitter=null,processor=null;
+let CHAN=0, NCHAN=1;   // selected input channel index, channels the open device offers
+let peak=0,armed=true,lastTrigMs=-1e9,pendingPulses=0,trigCount=0,ledMs=-1e9;
+
+/* geometry + rolled params */
+let geom=null;
+let gPos=null, gU=0, gV=0, gKind='surface', gCenters=null, gBoxEdge=10;
+let TR=200;
+let rot={x:0,y:0,z:0};
+const rnd=(a,b)=>a+Math.random()*(b-a);
+const ri=(a,b)=>a+((Math.random()*(b-a+1))|0);
+const FIGS=['super','harm','torus','plane','knot','lattice'];
+const MODES=['wire','points'];
+
+/* ---------- colour themes ----------
+   Each theme is a set of hue bands (degrees, may run past 360 to wrap through
+   red) plus a saturation and brightness range. Every pulse draws one colour
+   from the theme, so the palette stays coherent while the figure keeps
+   re-rolling. Brightness stays high — this is line art on black. */
+const PAL={
+  cycle:   {h:[[0,359]],                      s:[70,100], v:[100,100]},
+  mono:    {h:[[0,0]],                        s:[0,0],    v:[100,100]},
+  grey:    {h:[[0,0]],                        s:[0,0],    v:[45,100]},
+  pastel:  {h:[[0,359]],                      s:[18,42],  v:[95,100]},
+  neon:    {h:[[300,320],[168,192],[84,104]], s:[95,100], v:[100,100]},
+  hot:     {h:[[0,45]],                       s:[95,95],  v:[100,100]},
+  ember:   {h:[[350,378]],                    s:[80,100], v:[62,95]},
+  amber:   {h:[[28,46]],                      s:[85,100], v:[88,100]},
+  phos:    {h:[[118,155]],                    s:[70,100], v:[88,100]},
+  toxic:   {h:[[58,96]],                      s:[88,100], v:[92,100]},
+  spring:  {h:[[72,150]],                     s:[42,85],  v:[85,100]},
+  autumn:  {h:[[14,50]],                      s:[70,100], v:[70,100]},
+  winter:  {h:[[172,228]],                    s:[14,58],  v:[86,100]},
+  deep:    {h:[[184,252]],                    s:[62,100], v:[72,100]},
+  blossom: {h:[[298,358]],                    s:[32,78],  v:[90,100]},
+  uv:      {h:[[258,302]],                    s:[70,100], v:[80,100]},
+  dusk:    {h:[[252,332]],                    s:[52,92],  v:[68,96]},
+  sepia:   {h:[[26,44]],                      s:[22,52],  v:[70,100]}
+};
+function rollColour(){
+  const p=PAL[COLSEL]||PAL.cycle;
+  const band=p.h[(Math.random()*p.h.length)|0];
+  const h=((rnd(band[0],band[1])%360)+360)%360;
+  return [h, rnd(p.s[0],p.s[1]), rnd(p.v[0],p.v[1])];
+}
+
+let P={ fig:'super', res:34, mode:'wire', arr:'single', copies:1,
+        vx:0.2, vy:0.3, vz:0.1, ox:0, oy:0, oz:0, ortho:false, col:[0,0,100],
+        zoom:ZOOM, dolly:DOLLY };
+
+function setup(){
+  const c=createCanvas(windowWidth,windowHeight,WEBGL); c.parent('stage');
+  pixelDensity(1); setAttributes('antialias', true);
+  colorMode(HSB,360,100,100,1);
+  TR=Math.min(width,height)*0.30;
+  bindUI();
+  rollAndBuild();
+}
+function windowResized(){ resizeCanvas(windowWidth,windowHeight); TR=Math.min(width,height)*0.30; rollAndBuild(); }
+
+/* ---------- parameter re-roll ---------- */
+function rollAndBuild(){
+  const ch=CHAOS;
+  P.fig  = FIGSEL==='random'  ? FIGS[(Math.random()*FIGS.length)|0]  : FIGSEL;
+  P.mode = MODESEL==='random' ? MODES[(Math.random()*MODES.length)|0]: MODESEL;
+  P.res  = Math.max(8, ri(8, COMPLEX) | 0);
+  P.ox=rnd(0,TWO_PI); P.oy=rnd(0,TWO_PI); P.oz=rnd(0,TWO_PI);
+  P.vx=rnd(-1,1)*RATE; P.vy=rnd(-1,1)*RATE; P.vz=rnd(-1,1)*RATE;
+  P.ortho=Math.random()<0.35;
+  // camera: wander around the slider values by up to CAMRND on each re-roll
+  P.zoom  = Math.max(0.1, ZOOM * (1 + rnd(-CAMRND,CAMRND)));
+  P.dolly = Math.min(1, Math.max(0, DOLLY + rnd(-CAMRND,CAMRND)));
+  // replication layout
+  const layouts = REPLICATE<=1 ? ['single'] : ['single','ring','grid','stack'];
+  P.arr = layouts[(Math.random()*layouts.length)|0];
+  P.copies = P.arr==='single' ? 1 : ri(2, REPLICATE);
+  // colour
+  P.col=rollColour();
+
+  buildFigure(ch);
+}
+
+/* ---------- figure builders ---------- */
+function finalize(pos){                 // center + scale to TR, in place
+  let cx=0,cy=0,cz=0,n=pos.length/3;
+  for(let i=0;i<pos.length;i+=3){cx+=pos[i];cy+=pos[i+1];cz+=pos[i+2];}
+  cx/=n;cy/=n;cz/=n;
+  let mx=0;
+  for(let i=0;i<pos.length;i+=3){
+    pos[i]-=cx;pos[i+1]-=cy;pos[i+2]-=cz;
+    const d=Math.hypot(pos[i],pos[i+1],pos[i+2]); if(d>mx)mx=d;
+  }
+  // a degenerate figure (everything at one point) has no extent to scale to —
+  // scaling it anyway blows the scale factor up to ~1e8 and throws the mesh off screen
+  if(mx<1e-6) return 1;
+  const s=TR/mx;
+  for(let i=0;i<pos.length;i++) pos[i]*=s;
+  return s;
+}
+
+function superR(ang,m,n1,n2,n3){
+  const t=m*ang/4;
+  const a=Math.pow(Math.abs(Math.cos(t)),n2);
+  const b=Math.pow(Math.abs(Math.sin(t)),n3);
+  let r=Math.pow(a+b,-1/n1);
+  if(!isFinite(r)) r=0;
+  return Math.min(r,3);
+}
+
+function buildFigure(ch){
+  gKind='surface'; gCenters=null;
+  const R=Math.max(8,P.res);
+  if(P.fig==='lattice'){ buildLattice(); return; }
+
+  let U,V,pos;
+  if(P.fig==='super'){
+    U=R; V=R;
+    const m1=ri(1,16), n11=rnd(0.3,6), n12=rnd(0.3,8), n13=rnd(0.3,8);
+    const m2=ri(1,16), n21=rnd(0.3,6), n22=rnd(0.3,8), n23=rnd(0.3,8);
+    pos=new Float32Array(U*V*3);
+    for(let j=0;j<V;j++){ const phi=-HALF_PI+PI*j/(V-1); const r2=superR(phi,m2,n21,n22,n23);
+      for(let i=0;i<U;i++){ const th=-PI+TWO_PI*i/(U-1); const r1=superR(th,m1,n11,n12,n13);
+        const k=(j*U+i)*3;
+        pos[k]  =r1*Math.cos(th)*r2*Math.cos(phi);
+        pos[k+1]=r1*Math.sin(th)*r2*Math.cos(phi);
+        pos[k+2]=r2*Math.sin(phi);
+      }}
+  }
+  else if(P.fig==='harm'){
+    U=R; V=R;
+    const a=ri(1,9), b=ri(1,9), amp=rnd(0.1,0.6)*ch+0.05;
+    pos=new Float32Array(U*V*3);
+    for(let j=0;j<V;j++){ const phi=PI*j/(V-1);
+      for(let i=0;i<U;i++){ const th=TWO_PI*i/(U-1);
+        const rr=1+amp*(Math.sin(a*th)*Math.sin(b*phi))+amp*0.6*Math.cos((a+b)*phi);
+        const k=(j*U+i)*3;
+        pos[k]  =rr*Math.sin(phi)*Math.cos(th);
+        pos[k+1]=rr*Math.cos(phi);
+        pos[k+2]=rr*Math.sin(phi)*Math.sin(th);
+      }}
+  }
+  else if(P.fig==='torus'){
+    U=R; V=R;
+    const Rr=0.62, rr0=0.30, amp=rnd(0,0.7)*ch, f=rnd(0.6,4);
+    noiseSeed((Math.random()*99999)|0);
+    pos=new Float32Array(U*V*3);
+    for(let j=0;j<V;j++){ const v=TWO_PI*j/(V-1);
+      for(let i=0;i<U;i++){ const u=TWO_PI*i/(U-1);
+        const disp=amp*(noise(f*(1+Math.cos(u)),f*(1+Math.sin(u)),f*(1+Math.cos(v)))-0.5);
+        const rr=rr0+disp;
+        const k=(j*U+i)*3;
+        pos[k]  =(Rr+rr*Math.cos(v))*Math.cos(u);
+        pos[k+1]=(Rr+rr*Math.cos(v))*Math.sin(u);
+        pos[k+2]=rr*Math.sin(v);
+      }}
+  }
+  else if(P.fig==='plane'){
+    U=R; V=R;
+    const amp=rnd(0.15,0.9)*ch+0.05, f=rnd(0.6,3.5), oct=ri(1,3);
+    noiseSeed((Math.random()*99999)|0);
+    pos=new Float32Array(U*V*3);
+    for(let j=0;j<V;j++){ const y=-1+2*j/(V-1);
+      for(let i=0;i<U;i++){ const x=-1+2*i/(U-1);
+        let z=0,fa=1,am=1;
+        for(let o=0;o<oct;o++){ z+=am*(noise(f*fa*(x+1),f*fa*(y+1))-0.5); fa*=2; am*=0.5; }
+        const k=(j*U+i)*3; pos[k]=x; pos[k+1]=z*amp*1.6; pos[k+2]=y;
+      }}
+  }
+  else if(P.fig==='knot'){
+    const pathN=Math.max(24,R*2), ringN=Math.max(6,(R/2)|0);
+    U=ringN; V=pathN;
+    const p=ri(2,5), q=ri(2,7), tube=rnd(0.15,0.55)*(0.6+ch);
+    const cen=(t)=>{ const rr=Math.cos(q*t)+2.4;
+      return [rr*Math.cos(p*t), rr*Math.sin(p*t), -Math.sin(q*t)*1.3]; };
+    pos=new Float32Array(U*V*3);
+    for(let j=0;j<V;j++){ const t=TWO_PI*j/(V-1);
+      const c=cen(t), c1=cen(t+0.01), c0=cen(t-0.01);
+      let T=[c1[0]-c0[0],c1[1]-c0[1],c1[2]-c0[2]];
+      let tl=Math.hypot(T[0],T[1],T[2])||1; T=[T[0]/tl,T[1]/tl,T[2]/tl];
+      let up=[0,0,1]; if(Math.abs(T[2])>0.9) up=[0,1,0];
+      let N=[T[1]*up[2]-T[2]*up[1],T[2]*up[0]-T[0]*up[2],T[0]*up[1]-T[1]*up[0]];
+      let nl=Math.hypot(N[0],N[1],N[2])||1; N=[N[0]/nl,N[1]/nl,N[2]/nl];
+      let B=[T[1]*N[2]-T[2]*N[1],T[2]*N[0]-T[0]*N[2],T[0]*N[1]-T[1]*N[0]];
+      for(let i=0;i<U;i++){ const a=TWO_PI*i/(U-1); const ca=Math.cos(a)*tube, sa=Math.sin(a)*tube;
+        const k=(j*U+i)*3;
+        pos[k]  =c[0]+ca*N[0]+sa*B[0];
+        pos[k+1]=c[1]+ca*N[1]+sa*B[1];
+        pos[k+2]=c[2]+ca*N[2]+sa*B[2];
+      }}
+  }
+
+  finalize(pos);
+  gPos=pos; gU=U; gV=V;
+  buildSurfaceGeom();
+}
+
+function buildLattice(){
+  gKind='lattice';
+  const c=Math.max(2, Math.min(7, (2+ (CHAOS*5))|0, P.res>>3 || 3));
+  const n=Math.max(2, ri(2, Math.max(2, Math.min(6, (COMPLEX/8)|0)) ));
+  // build centers in [-1,1]
+  const centers=[], cells=[]; const skip=1-Math.min(0.6,CHAOS*0.6);
+  for(let i=0;i<n;i++)for(let j=0;j<n;j++)for(let k=0;k<n;k++){
+    const p=[-1+2*i/(n-1||1), -1+2*j/(n-1||1), -1+2*k/(n-1||1)];
+    cells.push(p);
+    if(Math.random()>skip) continue;                     // negative space
+    centers.push(p);
+  }
+  // one cell or none is a point, not a lattice — it has no extent to scale to,
+  // so top the survivors back up from the full grid
+  while(centers.length<2){
+    const p=cells[(Math.random()*cells.length)|0];
+    if(centers.indexOf(p)<0) centers.push(p);
+  }
+  const flat=new Float32Array(centers.length*3);
+  centers.forEach((p,idx)=>{flat[idx*3]=p[0];flat[idx*3+1]=p[1];flat[idx*3+2]=p[2];});
+  const s=finalize(flat);
+  gCenters=[]; for(let i=0;i<flat.length;i+=3) gCenters.push([flat[i],flat[i+1],flat[i+2]]);
+  gBoxEdge=(2/(n))*0.72*s;
+  gPos=flat;
+  freeGeom();
+  const edge=gBoxEdge, cs=gCenters;
+  geom=buildGeometry(()=>{ for(const p of cs){ push(); translate(p[0],p[1],p[2]); box(edge); pop(); } });
+}
+
+function buildSurfaceGeom(){
+  freeGeom();
+  const U=gU,V=gV,pos=gPos;
+  geom=buildGeometry(()=>{
+    for(let v=0; v<V-1; v++){
+      beginShape(QUAD_STRIP);
+      for(let u=0; u<U; u++){
+        const a=(v*U+u)*3, b=((v+1)*U+u)*3;
+        vertex(pos[a],pos[a+1],pos[a+2]);
+        vertex(pos[b],pos[b+1],pos[b+2]);
+      }
+      endShape();
+    }
+  });
+}
+function freeGeom(){ if(geom){ try{ freeGeometry(geom); }catch(e){} geom=null; } }
+
+/* ---------- pulse ---------- */
+function handlePulse(){ rollAndBuild(); trigCount++; ledMs=millis(); }
+
+/* ---------- draw ---------- */
+function draw(){
+  let n=pendingPulses; pendingPulses=0;
+  while(n-->0) handlePulse();
+
+  background(0);
+  if(P.ortho) ortho(-width/2,width/2,-height/2,height/2,-4000,4000);
+  else perspective(PI/3, width/height, 1, 6000);
+
+  // camera dolly: pull the eye from its default distance toward the object centre.
+  // dolly 0 = normal, 1 = essentially inside the mesh.
+  const defZ=(height/2)/Math.tan(PI/6);
+  camera(0,0, defZ*(1-P.dolly)+1, 0,0,0, 0,1,0);
+
+  const dt=deltaTime/1000;
+  rot.x+=P.vx*dt; rot.y+=P.vy*dt; rot.z+=P.vz*dt;
+
+  // zoom scales the whole scene; in ortho the dolly can't create perspective,
+  // so fold it in as extra magnification there.
+  scale(P.zoom * (P.ortho ? (1+P.dolly*4) : 1));
+  drawReplicated();
+  updateReadout();
+}
+
+function drawReplicated(){
+  const c=P.copies;
+  if(P.arr==='single'){ oriented(1, ()=>drawModel()); return; }
+  if(P.arr==='ring'){
+    const rad=TR*1.7, sc=0.5;
+    for(let k=0;k<c;k++){ const a=TWO_PI*k/c;
+      push(); translate(Math.cos(a)*rad,0,Math.sin(a)*rad); rotateY(-a); scale(sc);
+      oriented(1,()=>drawModel()); pop(); }
+    // the ring is hollow — fill the centre so a phone crop never hits black
+    push(); scale(sc); oriented(1,()=>drawModel()); pop();
+  } else if(P.arr==='grid'){
+    const g=Math.max(2,Math.round(Math.sqrt(c))), sp=TR*1.5, sc=Math.min(0.6,1.1/g);
+    for(let i=0;i<g;i++)for(let j=0;j<g;j++){
+      push(); translate((i-(g-1)/2)*sp,(j-(g-1)/2)*sp,0); scale(sc);
+      oriented(1,()=>drawModel()); pop(); }
+    // even grids leave a gap at the exact centre — plug it
+    if(g%2===0){ push(); scale(sc); oriented(1,()=>drawModel()); pop(); }
+  } else { // stack
+    const sp=TR*1.25, sc=0.6;
+    for(let k=0;k<c;k++){ push(); translate(0,0,(k-(c-1)/2)*sp); scale(sc);
+      oriented(1,()=>drawModel()); pop(); }
+  }
+}
+function oriented(s,fn){ push(); rotateX(rot.x+P.ox); rotateY(rot.y+P.oy); rotateZ(rot.z+P.oz); scale(s); fn(); pop(); }
+
+function drawModel(){
+  const col=P.col;
+  if(P.mode==='points'){
+    push(); stroke(col[0],col[1],col[2]); strokeWeight(WEIGHT*1.8);
+    // p5's WEBGL point path (_drawPoints) fails with GL INVALID_OPERATION unless some
+    // other stroked primitive has been drawn since the geometry was rebuilt — without
+    // this the whole point cloud silently renders nothing. Prime it off-screen.
+    push(); translate(0,0,-1e6); line(0,0,0,1,0,0); pop();
+    beginShape(POINTS);
+    if(gKind==='lattice' && gCenters){
+      // the lattice's gPos is just cell centres — a couple of dots. Draw the cell
+      // corners instead so the point cloud actually reads as the same figure.
+      const e=gBoxEdge/2;
+      for(const c of gCenters)
+        for(let sx=-1;sx<=1;sx+=2)for(let sy=-1;sy<=1;sy+=2)for(let sz=-1;sz<=1;sz+=2)
+          vertex(c[0]+sx*e, c[1]+sy*e, c[2]+sz*e);
+    } else {
+      for(let i=0;i<gPos.length;i+=3) vertex(gPos[i],gPos[i+1],gPos[i+2]);
+    }
+    endShape(); pop();
+  } else { // wireframe
+    push(); noFill(); stroke(col[0],col[1],col[2]); strokeWeight(WEIGHT); if(geom) model(geom); pop();
+  }
+}
+
+/* ============================ AUDIO ============================ */
+async function startAudio(){
+  try{
+    if(!window.isSecureContext || !navigator.mediaDevices || !navigator.mediaDevices.getUserMedia){
+      const onFile=location.protocol==='file:';
+      document.getElementById('startBtn').textContent='mic needs localhost';
+      alert('Microphone access is blocked in this context.\n\n'+
+        (onFile
+          ? 'You opened this page as a file:// URL. Chrome does not allow mic access there.\n\nServe it over localhost instead — from the folder containing this file, run:\n\n  python3 -m http.server 8000\n\nthen open  http://localhost:8000/pulse-synth.html'
+          : 'This page must be served over https:// or http://localhost for the microphone to work.'));
+      return;
+    }
+    if(!audioCtx) audioCtx=new (window.AudioContext||window.webkitAudioContext)();
+    await audioCtx.resume();
+    const id=document.getElementById('deviceSel').value;
+    // ask for every channel the interface offers — "ideal" is never rejected, the
+    // browser just clamps it to whatever the device actually has.
+    const audioBase={echoCancellation:false,noiseSuppression:false,autoGainControl:false,
+                     channelCount:{ideal:32}};
+    const wantId=(id&&id.length>8);
+    const constraints={audio:wantId?{...audioBase,deviceId:{exact:id}}:audioBase,video:false};
+    if(stream) stream.getTracks().forEach(t=>t.stop());
+    if(processor){try{processor.disconnect();}catch(e){}}
+    if(splitter){try{splitter.disconnect();}catch(e){} splitter=null;}
+    if(source){try{source.disconnect();}catch(e){}}
+    try{
+      stream=await navigator.mediaDevices.getUserMedia(constraints);
+    }catch(e){
+      // A specific device was requested but can't be satisfied — fall back to the default mic.
+      if(wantId && (e.name==='OverconstrainedError'||e.name==='NotFoundError')){
+        stream=await navigator.mediaDevices.getUserMedia({audio:audioBase,video:false});
+      }else throw e;
+    }
+    source=audioCtx.createMediaStreamSource(stream);
+    NCHAN=Math.max(1, stream.getAudioTracks()[0].getSettings().channelCount || source.channelCount || 1);
+    if(CHAN>=NCHAN) CHAN=0;
+    // split the device out into its individual channels and tap only the selected one
+    splitter=audioCtx.createChannelSplitter(NCHAN);
+    processor=audioCtx.createScriptProcessor(256,1,1);
+    processor.onaudioprocess=onAudio;
+    source.connect(splitter);
+    splitter.connect(processor, CHAN, 0);
+    processor.connect(audioCtx.destination);
+    listChannels();
+    await listDevices();
+    const b=document.getElementById('startBtn'); b.textContent='● listening'; b.classList.add('armed');
+  }catch(err){
+    console.error(err);
+    document.getElementById('startBtn').textContent='input blocked — retry';
+    let tip;
+    switch(err.name){
+      case 'NotAllowedError': // permission denied — by the browser or by macOS
+        tip='Permission was denied. Two places to check:\n\n'+
+          '1. macOS: System Settings > Privacy & Security > Microphone > enable Google Chrome, then fully quit and reopen Chrome.\n\n'+
+          '2. Chrome: click the mic/tune icon at the left of the address bar > Site settings > Microphone > Allow, then reload.';
+        break;
+      case 'NotFoundError': case 'OverconstrainedError':
+        tip='No microphone matched. Pick a different device in the dropdown, or check a mic is connected and enabled.';
+        break;
+      case 'NotReadableError':
+        tip='The mic is in use or locked by another app (Zoom, Photo Booth, etc.) or the OS. Close other apps using the mic and retry.';
+        break;
+      default:
+        tip='Make sure this page is served over http://localhost or https:// (not file://) and that Chrome has mic permission.';
+    }
+    alert('Could not open audio input.\n\n'+err.name+': '+err.message+'\n\n'+tip);
+  }
+}
+async function listDevices(){
+  const devs=await navigator.mediaDevices.enumerateDevices();
+  const sel=document.getElementById('deviceSel');
+  const cur=stream?stream.getAudioTracks()[0].getSettings().deviceId:null;
+  sel.innerHTML='';
+  devs.filter(d=>d.kind==='audioinput').forEach(d=>{
+    const o=document.createElement('option'); o.value=d.deviceId;
+    o.textContent=d.label||('input '+d.deviceId.slice(0,6)); if(d.deviceId===cur)o.selected=true; sel.appendChild(o);
+  });
+}
+function listChannels(){
+  const sel=document.getElementById('chanSel');
+  sel.innerHTML='';
+  for(let i=0;i<NCHAN;i++){
+    const o=document.createElement('option');
+    o.value=i; o.textContent=(i+1); if(i===CHAN) o.selected=true; sel.appendChild(o);
+  }
+}
+/* re-patch the tap to another channel without tearing the stream down */
+function setChannel(i){
+  CHAN=Math.max(0,Math.min(NCHAN-1,i|0));
+  if(!splitter||!processor) return;
+  try{ splitter.disconnect(processor); }catch(e){}
+  splitter.connect(processor, CHAN, 0);
+}
+function onAudio(e){
+  const buf=e.inputBuffer.getChannelData(0); let p=peak; const now=performance.now();
+  for(let i=0;i<buf.length;i++){
+    const s=buf[i]; const a=s<0?-s:s; if(a>p)p=a;
+    const v=POLARITY>0?s:-s;
+    if(armed && v>THRESH){ pendingPulses++; armed=false; lastTrigMs=now; }
+    else if(!armed && v<THRESH*0.5 && (now-lastTrigMs)>HOLD){ armed=true; }
+  }
+  peak=p;
+}
+
+/* ============================ UI ============================ */
+function bindUI(){
+  const on=(id,fn)=>document.getElementById(id).addEventListener('input',fn);
+  const show=(id,v)=>document.getElementById(id).textContent=v;
+  document.getElementById('startBtn').onclick=startAudio;
+  document.getElementById('deviceSel').onchange=()=>{ if(stream) startAudio(); };
+  document.getElementById('chanSel').onchange=e=>setChannel(+e.target.value);
+  document.getElementById('fsBtn').onclick=toggleFS;
+  document.getElementById('polBtn').onclick=(ev)=>{ POLARITY*=-1; ev.target.textContent=POLARITY>0?'+ rising':'− falling'; };
+
+  document.getElementById('figSel').onchange =e=>{ FIGSEL=e.target.value; rollAndBuild(); };
+  document.getElementById('modeSel').onchange=e=>{ MODESEL=e.target.value; if(MODESEL!=='random')P.mode=MODESEL; };
+  document.getElementById('colSel').onchange =e=>{ COLSEL=e.target.value; rollAndBuild(); };
+
+  on('sThr',e=>{THRESH=+e.target.value; show('vThr',THRESH.toFixed(3));
+    document.getElementById('thr').style.left=(THRESH*100)+'%';});
+  on('sRef',e=>{HOLD=+e.target.value; show('vRef',HOLD);});
+  on('sCx', e=>{COMPLEX=+e.target.value; show('vCx',COMPLEX); rollAndBuild();});
+  on('sDen',e=>{REPLICATE=+e.target.value; show('vDen',REPLICATE);});
+  on('sRt', e=>{RATE=+e.target.value; show('vRt',RATE.toFixed(2));});
+  on('sCh', e=>{CHAOS=+e.target.value; show('vCh',CHAOS.toFixed(2)); rollAndBuild();});
+  on('sWt', e=>{WEIGHT=+e.target.value; show('vWt',WEIGHT.toFixed(1));});
+  on('sZm', e=>{ZOOM=+e.target.value; show('vZm',ZOOM.toFixed(2)); P.zoom=ZOOM;});
+  on('sDl', e=>{DOLLY=+e.target.value; show('vDl',DOLLY.toFixed(2)); P.dolly=DOLLY;});
+  on('sCr', e=>{CAMRND=+e.target.value; show('vCr',CAMRND.toFixed(2));});
+  document.getElementById('thr').style.left=(THRESH*100)+'%';
+
+  // the key hint stays hidden until the pointer enters its corner
+  const hint=document.querySelector('.hint');
+  window.addEventListener('mousemove',e=>{
+    const near = e.clientX < 340 && e.clientY > window.innerHeight-110;
+    hint.classList.toggle('show', near);
+  });
+}
+function updateReadout(){
+  document.getElementById('meterFill').style.width=Math.min(100,peak*100).toFixed(1)+'%';
+  peak*=0.90;
+  document.getElementById('cnt').textContent=trigCount;
+  const led=document.getElementById('led');
+  led.classList.toggle('on', millis()-ledMs<70);
+}
+function toggleFS(){ if(!document.fullscreenElement) document.documentElement.requestFullscreen(); else document.exitFullscreen(); }
+function keyPressed(){
+  if(key===' '){ pendingPulses++; return false; }
+  if(key==='h'||key==='H') document.getElementById('panel').classList.toggle('hidden');
+  if(key==='f'||key==='F') toggleFS();
+}
+</script>
+</body>
+</html>
